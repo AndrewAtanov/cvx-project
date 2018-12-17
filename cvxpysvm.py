@@ -38,10 +38,11 @@ class SVMPrimal(BaseEstimator, ClassifierMixin):
 
 
 class SVM(BaseEstimator, ClassifierMixin):
-    def __init__(self, C=1., kernel='linear', kernel_params={}):
+    def __init__(self, C=1., kernel='linear', kernel_params={}, reg_gram=False):
         self.C = C
         self.kernel_params = kernel_params
         self.kernel = kernel
+        self.reg_gram = reg_gram
 
         self.coef = None
         self.bias = None
@@ -60,7 +61,7 @@ class SVM(BaseEstimator, ClassifierMixin):
         else:
             raise NotImplementedError
         # add \alpha I to the gram matrix for numerical stability
-        if Y is None:
+        if Y is None and self.reg_gram:
             K += np.eye(K.shape[0]) * 1e-6
         return K
 
