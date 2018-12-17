@@ -48,7 +48,7 @@ class SVM(BaseEstimator, ClassifierMixin):
         self.labels = None
         self.y = None
         self.X = None
-        self.eps = 1e-9
+        self.eps = 1e-10
 
     def gramm_matrix(self, X, Y=None):
         if self.kernel == 'linear':
@@ -59,6 +59,9 @@ class SVM(BaseEstimator, ClassifierMixin):
             K = pairwise.rbf_kernel(X, Y=Y, **self.kernel_params)
         else:
             raise NotImplementedError
+        # add \alpha I to the gram matrix for numerical stability
+        if Y is None:
+            K += np.eye(K.shape[0]) * 1e-6
         return K
 
     def get_signed_gramm_matrix(self, X, y):
