@@ -5,3 +5,7 @@
 
 ## Accuracy and sparsity results
 ![alt text](accuracy.png)
+![alt text](sparsity.png)
+
+## SVM MNIST top10 support vector importance
+![alt text](mnist.png)
