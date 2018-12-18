@@ -5,12 +5,14 @@ from sklearn.metrics import pairwise
 
 
 class SVMPrimal(BaseEstimator, ClassifierMixin):
+
     def __init__(self, lambd=1.):
         self.lambd = lambd
 
         self.coef = None
         self.bias = None
         self.labels = None
+        self.sparsity = None
 
     def fit(self, X, y):
         if len(np.unique(y)) > 2:
@@ -32,24 +34,27 @@ class SVMPrimal(BaseEstimator, ClassifierMixin):
         self.bias = bias.value
         self._status = prob.status
 
+        self.sparsity = np.sum(np.isclose(self.coef, 0)) / m
+
     def predict(self, X):
         p = np.dot(X, self.coef) - self.bias
         return self.labels[(p > 0).astype(int)]
 
 
 class SVM(BaseEstimator, ClassifierMixin):
-    def __init__(self, C=1., kernel='linear', kernel_params={}, reg_gram=False):
+
+    def __init__(self, C=1., kernel='linear', kernel_params={}):
         self.C = C
         self.kernel_params = kernel_params
         self.kernel = kernel
-        self.reg_gram = reg_gram
 
         self.coef = None
         self.bias = None
         self.labels = None
         self.y = None
         self.X = None
-        self.eps = 1e-10
+        self.eps = 1e-9
+        self.sparsity = None
 
     def gramm_matrix(self, X, Y=None):
         if self.kernel == 'linear':
@@ -60,9 +65,6 @@ class SVM(BaseEstimator, ClassifierMixin):
             K = pairwise.rbf_kernel(X, Y=Y, **self.kernel_params)
         else:
             raise NotImplementedError
-        # add \alpha I to the gram matrix for numerical stability
-        if Y is None and self.reg_gram:
-            K += np.eye(K.shape[0]) * 1e-6
         return K
 
     def get_signed_gramm_matrix(self, X, y):
@@ -88,7 +90,6 @@ class SVM(BaseEstimator, ClassifierMixin):
         n, d = self.X.shape
         lambd = cvx.Variable(shape=(n,))
         K = self.get_signed_gramm_matrix(self.X, self.y)
-
         objective = 0.5 * cvx.atoms.quad_form(lambd, K) - cvx.sum(lambd)
         constraints = [
             lambd <= self.C,
@@ -101,17 +102,21 @@ class SVM(BaseEstimator, ClassifierMixin):
 
         self.lambd = lambd.value
         self.support = self.lambd > self.eps
-        support_boundary = (self.lambd > self.eps) & (self.lambd < self.C - self.eps)
+        support_boundary = (self.lambd > self.eps) & (
+            self.lambd < self.C - self.eps)
         K = self.gramm_matrix(self.X[self.support], self.X[support_boundary])
         self.coef = self.lambd[self.support] * self.y[self.support]
         wx = np.sum(self.coef[:, np.newaxis] * K, axis=0)
         self.bias = np.median(self.y[support_boundary] - wx)
 
+        self.sparsity = 1 - (np.sum(self.support) / len(self.support))
+
         return self
 
     def decision_function(self, X):
         K = self.gramm_matrix(self.X[self.support], X)
-        wx = np.sum((self.lambd[self.support] * self.y[self.support])[:, np.newaxis] * K, axis=0)
+        wx = np.sum(
+            (self.lambd[self.support] * self.y[self.support])[:, np.newaxis] * K, axis=0)
         return wx + self.bias
 
     def predict(self, X):
@@ -120,6 +125,7 @@ class SVM(BaseEstimator, ClassifierMixin):
 
 
 class LogisticRegression(BaseEstimator, ClassifierMixin):
+
     def __init__(self, lambd=1., norm=2):
         self.lambd = lambd
 
@@ -127,6 +133,7 @@ class LogisticRegression(BaseEstimator, ClassifierMixin):
         self.bias = None
         self.labels = None
         self.norm = norm
+        self.sparsity = None
 
     def fit(self, X, y):
         if len(np.unique(y)) > 2:
@@ -148,6 +155,8 @@ class LogisticRegression(BaseEstimator, ClassifierMixin):
         self.coef = np.array(w.value).squeeze()
         self.bias = bias.value
         self._status = prob.status
+
+        self.sparsity = np.sum(np.isclose(self.coef, 0)) / m
 
     def predict(self, X):
         p = np.dot(X, self.coef) - self.bias
